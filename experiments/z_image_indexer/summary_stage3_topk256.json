@@ -1,0 +1,10 @@
+{
+  "layer_id": 12,
+  "topk": 256,
+  "num_prompts": 2,
+  "mean_dense_time_sec": 0.7907182555645704,
+  "mean_sparse_time_sec": 1.097807738929987,
+  "mean_time_ratio_sparse_over_dense": 1.5734720874375816,
+  "mean_image_mse": 0.018657910637557507,
+  "mean_step_recall": 0.5445523262023926
+}
