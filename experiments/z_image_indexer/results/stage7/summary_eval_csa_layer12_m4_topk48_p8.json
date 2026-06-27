@@ -1,0 +1,10 @@
+{
+  "layer_id": 12,
+  "compression_rate": 4,
+  "compressed_topk": 48,
+  "num_prompts": 8,
+  "mean_dense_time_sec": 0.6047906673047692,
+  "mean_sparse_time_sec": 0.5754788876511157,
+  "mean_time_ratio_sparse_over_dense": 1.0177750021356342,
+  "mean_image_mse": 0.018816620606230572
+}
