@@ -1,0 +1,28 @@
+[
+  {
+    "prompt_index": 0,
+    "prompt": "Young Chinese woman in red Hanfu, intricate embroidery, soft-lit night scene, cinematic portrait.",
+    "topk": 256,
+    "dense_time_sec": 1.0689016338437796,
+    "sparse_time_sec": 1.119487438350916,
+    "time_ratio_sparse_over_dense": 1.047325032449646,
+    "image_mse": 0.008131831884384155,
+    "mean_step_recall": 0.5349245071411133,
+    "dense_path": "prompt_0_dense.png",
+    "sparse_path": "prompt_0_sparse.png",
+    "compare_path": "prompt_0_compare.png"
+  },
+  {
+    "prompt_index": 1,
+    "prompt": "A futuristic poster with bold Chinese typography, bright neon colors, complex layout, high detail.",
+    "topk": 256,
+    "dense_time_sec": 0.5125348772853613,
+    "sparse_time_sec": 1.076128039509058,
+    "time_ratio_sparse_over_dense": 2.0996191424255173,
+    "image_mse": 0.029183989390730858,
+    "mean_step_recall": 0.5541801452636719,
+    "dense_path": "prompt_1_dense.png",
+    "sparse_path": "prompt_1_sparse.png",
+    "compare_path": "prompt_1_compare.png"
+  }
+]
