@@ -1,69 +1,46 @@
-# Z-Image Indexer Distillation PoC
+# Z-Image Experiment Reports
 
-## Goal
+## Purpose
 
-Test whether a lightweight standalone indexer can learn the image-token attention pattern of a frozen `Z-Image-Turbo` model.
+This directory contains the human-readable writeups for the `Z-Image` sparse-routing experiments.
 
-This is a feasibility experiment, not a production sparse-attention replacement.
+## Suggested Reading Order
 
-## Scope
+1. `RESULTS.md`
+   - earliest standalone indexer-distillation PoC summary
+2. `STAGE2_RESULTS.md`
+   - one-layer sparse replacement approximation results
+3. `STAGE3_RESULTS.md`
+   - first real full-generation single-layer sparse comparison
+4. `STAGE4_RESULTS.md`
+   - two-layer raw-token sparse comparison
+5. `STAGE5_RESULTS.md`
+   - vectorized execution-path improvement for the two-layer raw-token route
+6. `STAGE6_RESULTS.md`
+   - first minimal CSA-like compressed-memory result
+7. `STAGE6_SWEEP_RESULTS.md`
+   - small CSA-like parameter sweep
+8. `STAGE6_EXPANDED_RESULTS.md`
+   - expanded validation of the leading CSA-like point
+9. `STAGE6_CANDIDATE_COMPARISON.md`
+   - head-to-head comparison between the two most relevant CSA-like candidates
+10. `STAGE7_TRAINED_EVAL_RESULTS.md`
+   - post-training evaluation of the current default CSA-like candidate
+11. `STAGE8_TRAINED_CSA_CANDIDATE_COMPARISON.md`
+   - trained-point comparison between the main CSA-like candidates
 
-- Freeze the original `Z-Image-Turbo` model.
-- Use the 4-step scheduler setting.
-- Distill one selected transformer layer at a time.
-- Distill only image-token to image-token attention.
-- Keep text tokens out of the learned routing path for this first PoC.
+## Operational Docs
 
-## Why This Design
+- `TRAINING_QUICKSTART.md`
+  - direct server-side start instructions for the current default training point
+- `FORMAL_TRAINING_CHECKLIST.md`
+  - pre-flight checklist before longer formal training runs
 
-`Z-Image` is not an LLM-style causal decode model. It recomputes the transformer stack on every denoising step, so the right first question is:
+## Additional Note
 
-> can a cheap detached indexer predict the teacher attention support well enough to justify a later sparse-attention integration?
+The current default candidate for the next formal training phase is still:
 
-This PoC answers that question with the minimum possible engineering risk.
-
-## Teacher / Student Setup
-
-### Teacher
-
-- Frozen `Z-Image-Turbo`
-- Full attention
-- Capture Q/K at one chosen unified-sequence transformer layer
-
-### Student
-
-- A lightweight bilinear indexer
-- Input: detached teacher Q and K for image tokens only
-- Output: dense score matrix over image-token keys
-
-## Training Target
-
-For each query image token:
-
-- Compute teacher attention logits from teacher Q/K
-- Average over heads
-- Apply softmax over image-token keys
-- Train the indexer with KL divergence against that distribution
-
-## Metrics
-
-- `kl`: KL divergence from student distribution to teacher distribution
-- `recall_at_k`: overlap between teacher top-k keys and student top-k keys
-- `student_entropy`: optional sanity signal for collapse
-
-## Success Criteria
-
-The PoC is considered technically promising if, within a bounded run:
-
-- `kl` trends down
-- `recall_at_k` trends up materially above initialization
-
-This still does **not** prove end-to-end image quality or speed improvement. It only proves that the sparse support may be learnable.
-
-## What This PoC Does Not Prove
-
-- Faster inference
-- Better image quality
-- Safe replacement of full attention in all layers / all steps
-
-Those require a second-stage experiment that actually swaps part of the attention path.
+- `Z-Image-Turbo`
+- `layer12`
+- `compression_rate=2`
+- `compressed_topk=64`
