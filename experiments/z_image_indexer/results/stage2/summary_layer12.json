@@ -1,0 +1,23 @@
+{
+  "64": {
+    "mean_recall_at_k": 0.4764575958251953,
+    "mean_attn_output_mse": 88.890625,
+    "mean_attn_output_cosine": 0.839599609375,
+    "mean_final_noise_pred_mse": 0.09711456298828125,
+    "mean_final_noise_pred_cosine": 0.964111328125
+  },
+  "128": {
+    "mean_recall_at_k": 0.5366921424865723,
+    "mean_attn_output_mse": 43.765625,
+    "mean_attn_output_cosine": 0.916748046875,
+    "mean_final_noise_pred_mse": 0.08448266983032227,
+    "mean_final_noise_pred_cosine": 0.968994140625
+  },
+  "256": {
+    "mean_recall_at_k": 0.6123306751251221,
+    "mean_attn_output_mse": 17.068359375,
+    "mean_attn_output_cosine": 0.9658203125,
+    "mean_final_noise_pred_mse": 0.05866503715515137,
+    "mean_final_noise_pred_cosine": 0.978515625
+  }
+}
