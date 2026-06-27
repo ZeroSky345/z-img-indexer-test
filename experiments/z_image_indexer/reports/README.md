@@ -35,6 +35,8 @@ This directory contains the human-readable writeups for the `Z-Image` sparse-rou
   - direct server-side start instructions for the current default training point
 - `FORMAL_TRAINING_CHECKLIST.md`
   - pre-flight checklist before longer formal training runs
+- `BENCHMARK_QUICKSTART.md`
+  - standard benchmark launch path for comparison runs
 
 ## Additional Note
 
