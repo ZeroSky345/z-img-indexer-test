@@ -37,6 +37,8 @@ This directory contains the human-readable writeups for the `Z-Image` sparse-rou
   - pre-flight checklist before longer formal training runs
 - `BENCHMARK_QUICKSTART.md`
   - standard benchmark launch path for comparison runs
+- `STAGE9_MULTILAYER_PREP.md`
+  - preparation notes before the first multi-layer training phase
 
 ## Additional Note
 
