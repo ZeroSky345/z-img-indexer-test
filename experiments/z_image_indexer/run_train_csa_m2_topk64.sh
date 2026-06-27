@@ -7,7 +7,7 @@ export HF_HOME=/tmp/hf-home
 
 python experiments/z_image_indexer/train_csa_indexer.py \
   --model-base-path /tmp/DiffSynth-Studio/models \
-  --prompt-file experiments/z_image_indexer/default_prompts_train.txt \
+  --prompt-file experiments/z_image_indexer/configs/default_prompts_train.txt \
   --output-dir experiments/z_image_indexer/results/train_csa_layer12_m2_topk64 \
   --steps 1000 \
   --height 512 \
