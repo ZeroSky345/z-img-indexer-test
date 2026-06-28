@@ -8,7 +8,7 @@ export CUDA_VISIBLE_DEVICES=0
 export MODELSCOPE_CACHE=/tmp/modelscope-cache
 export HF_HOME=/tmp/hf-home
 
-python experiments/z_image_indexer/train_csa_indexer.py \
+python experiments/z_image_indexer/train_csa_multilayer_indexer.py \
   --model-base-path /tmp/DiffSynth-Studio/models \
   --prompt-file experiments/z_image_indexer/configs/default_prompts_train.txt \
   --output-dir experiments/z_image_indexer/results/train_csa_layers12_13_m2_topk64 \
@@ -16,7 +16,7 @@ python experiments/z_image_indexer/train_csa_indexer.py \
   --height 512 \
   --width 512 \
   --num-inference-steps 4 \
-  --layer-id 12 \
+  --layer-ids 12,13 \
   --compression-rate 2 \
   --compressed-topk 64 \
   --rank 128 \
