@@ -43,6 +43,8 @@ This directory contains the human-readable writeups for the `Z-Image` sparse-rou
   - final pre-launch checklist before any first multi-layer run
 - `STAGE10_MULTILAYER_GO_NO_GO.md`
   - current decision summary on whether to cross into the multi-layer phase
+- `STAGE11_MULTILAYER_LAUNCH_PLAN.md`
+  - concrete first-run plan for the first controlled multi-layer validation run
 
 ## Additional Note
 
