@@ -1,0 +1,19 @@
+{
+  "model_id": "Tongyi-MAI/Z-Image-Turbo",
+  "layer_ids": [12, 13],
+  "compression_rate": 2,
+  "compressed_topk": 64,
+  "height": 512,
+  "width": 512,
+  "num_inference_steps": 4,
+  "steps": 1000,
+  "rank": 128,
+  "lr": 0.001,
+  "weight_decay": 0.0,
+  "recall_k": 16,
+  "seed": 42,
+  "device": "cuda",
+  "hardware_mode": "single_gpu_80gb_recommended",
+  "training_mode": "indexer_only",
+  "note": "Recommended first multi-layer validation run. Do not escalate to multi-GPU until this single-GPU run is evaluated."
+}
