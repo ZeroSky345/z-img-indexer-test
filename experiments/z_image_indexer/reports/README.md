@@ -39,6 +39,10 @@ This directory contains the human-readable writeups for the `Z-Image` sparse-rou
   - standard benchmark launch path for comparison runs
 - `STAGE9_MULTILAYER_PREP.md`
   - preparation notes before the first multi-layer training phase
+- `MULTILAYER_FINAL_CHECKLIST.md`
+  - final pre-launch checklist before any first multi-layer run
+- `STAGE10_MULTILAYER_GO_NO_GO.md`
+  - current decision summary on whether to cross into the multi-layer phase
 
 ## Additional Note
 
