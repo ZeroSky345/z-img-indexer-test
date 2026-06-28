@@ -1,0 +1,43 @@
+{
+  "name": "benchmark_prompts_v1",
+  "prompt_count": 12,
+  "categories": [
+    {
+      "name": "portrait",
+      "indices": [0]
+    },
+    {
+      "name": "poster_text",
+      "indices": [1]
+    },
+    {
+      "name": "product",
+      "indices": [2, 9]
+    },
+    {
+      "name": "fantasy_city",
+      "indices": [3]
+    },
+    {
+      "name": "modern_city_landscape",
+      "indices": [4, 11]
+    },
+    {
+      "name": "street_scene",
+      "indices": [5]
+    },
+    {
+      "name": "nature_landscape",
+      "indices": [6, 10]
+    },
+    {
+      "name": "cyberpunk_city",
+      "indices": [7]
+    },
+    {
+      "name": "architecture_interior",
+      "indices": [8]
+    }
+  ],
+  "notes": "Use this metadata file to keep benchmark composition stable across future single-layer and multi-layer comparisons."
+}
