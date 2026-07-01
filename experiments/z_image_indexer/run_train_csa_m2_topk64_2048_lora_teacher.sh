@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1,2,3}
 export MODELSCOPE_CACHE=${MODELSCOPE_CACHE:-/tmp/modelscope-cache}
 export HF_HOME=${HF_HOME:-/tmp/hf-home}
 
-TEACHER_LORA_PATH=${TEACHER_LORA_PATH:-./models/train/Z-Image-Turbo_lora_2048_adapter/epoch-4.safetensors}
+TEACHER_LORA_PATH=${TEACHER_LORA_PATH:-./models/lora/z_image_turbo_lora.safetensors}
 TEACHER_LORA_ALPHA=${TEACHER_LORA_ALPHA:-1.0}
 
 python experiments/z_image_indexer/train_csa_indexer.py \
