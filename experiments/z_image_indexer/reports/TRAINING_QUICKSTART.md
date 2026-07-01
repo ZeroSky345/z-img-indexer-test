@@ -111,8 +111,40 @@ Main outputs:
 
 ## What this does not yet do
 
-- multi-layer training
-- joint training with the base model
+- base-model joint training
 - LPIPS / OCR / larger benchmark evaluation
 
 Those are next steps after this first formalized training entry is stable.
+
+## All-layer CSA-style training
+
+The multi-layer training entry also supports all main Z-Image DiT layers:
+
+```bash
+bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_bs4.sh
+```
+
+Equivalent direct command:
+
+```bash
+python experiments/z_image_indexer/train_csa_multilayer_indexer.py \
+  --model-base-path /path/to/models \
+  --prompt-file experiments/z_image_indexer/configs/default_prompts_train.txt \
+  --output-dir experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_bs4 \
+  --steps 1000 \
+  --height 512 \
+  --width 512 \
+  --num-inference-steps 4 \
+  --layer-ids all \
+  --batch-size 4 \
+  --compression-rate 2 \
+  --compressed-topk 64 \
+  --rank 128 \
+  --lr 1e-3 \
+  --weight-decay 0.0 \
+  --recall-k 16 \
+  --seed 42 \
+  --device cuda
+```
+
+`--batch-size` is gradient accumulation over multiple prompt/timestep/latent samples per optimizer step, so it increases the effective training batch without requiring all samples to stay in memory together.
