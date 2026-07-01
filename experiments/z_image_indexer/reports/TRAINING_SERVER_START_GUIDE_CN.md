@@ -8,6 +8,12 @@
 
 当前训练对象不是重训完整 `Z-Image-Turbo`，而是训练一个独立的 sparse routing / indexer 模块。
 
+当前后续训练服务器默认目标分辨率已调整为：
+
+- `2048x2048`
+
+512x512 脚本仍保留为快速环境检查入口，但正式高分辨率训练请使用本文档中的 2048 命令。
+
 ## 1. 当前可以启动的训练任务
 
 ### 任务 A：单层 CSA indexer 训练
@@ -21,14 +27,14 @@
 - 路线：`CSA-like compressed memory`
 - `compression_rate=2`
 - `compressed_topk=64`
-- 分辨率：`512x512`
+- 分辨率：`2048x2048`
 - 推理步数：`4`
 - 训练模式：只训练 indexer，不训练主模型
 
 启动命令：
 
 ```bash
-bash experiments/z_image_indexer/run_train_csa_m2_topk64.sh
+bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048.sh
 ```
 
 ### 任务 B：双层 CSA indexer 训练
@@ -50,6 +56,7 @@ bash experiments/z_image_indexer/run_train_csa_multilayer_l12_l13_m2_topk64.sh
 - 层：`all`
 - 默认等价于 Z-Image DiT 所有主干层，当前模型通常是 `0-29`
 - `batch_size=4`
+- 分辨率：`2048x2048`
 - `compression_rate=2`
 - `compressed_topk=64`
 - 训练模式：只训练 indexer，不训练主模型
@@ -57,14 +64,14 @@ bash experiments/z_image_indexer/run_train_csa_multilayer_l12_l13_m2_topk64.sh
 启动命令：
 
 ```bash
-bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_bs4.sh
+bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
 ```
 
 说明：
 
 - `--layer-ids all` 会自动读取 `pipe.dit.layers` 的层数。
 - `--batch-size 4` 是梯度累积意义上的 batch size，每个 optimizer step 累计 4 个 prompt/timestep/latent 样本。
-- 全层训练比单层和双层明显更重，建议先做短步数 smoke run。
+- 全层 2048 训练面向后续大显存 / 多卡服务器，不再按 512 基线估算资源。
 
 ## 2. 推荐硬件
 
@@ -73,7 +80,7 @@ bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_bs4.sh
 建议：
 
 - NVIDIA GPU
-- 能正常运行 `Z-Image-Turbo` 512x512 4-step 推理
+- 能正常运行 `Z-Image-Turbo` 2048x2048 4-step 推理
 - 推荐 40GB 以上显存，更稳妥是 80GB
 
 ### 双层训练
@@ -87,21 +94,10 @@ bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_bs4.sh
 
 建议：
 
-- 单张 80GB GPU 先做 smoke run
+- 面向大显存 / 多卡训练服务器
+- 默认 `2048x2048`
 - 默认 `batch_size=4`
-- 如果 OOM，按顺序降级：
-
-```bash
---batch-size 2
-```
-
-再不行：
-
-```bash
---batch-size 1
-```
-
-如果全层 `batch_size=1` 仍然 OOM，才考虑多卡或更细的层分组训练。
+- 当前脚本是单进程训练入口；真正多卡并行需要后续补 DDP / 模型并行逻辑
 
 ## 3. 服务器环境准备
 
@@ -179,7 +175,7 @@ export HF_HOME=/tmp/hf-home
 
 ## 5. 启动训练
 
-### 5.1 推荐先跑单层训练
+### 5.1 推荐先跑 2048 单层训练
 
 ```bash
 cd z-img-indexer-test
@@ -187,13 +183,13 @@ export CUDA_VISIBLE_DEVICES=0
 export MODELSCOPE_CACHE=/tmp/modelscope-cache
 export HF_HOME=/tmp/hf-home
 
-bash experiments/z_image_indexer/run_train_csa_m2_topk64.sh
+bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048.sh
 ```
 
 训练输出目录：
 
 ```text
-experiments/z_image_indexer/results/train_csa_layer12_m2_topk64/
+experiments/z_image_indexer/results/train_csa_layer12_m2_topk64_2048/
 ```
 
 关键输出：
@@ -222,16 +218,16 @@ experiments/z_image_indexer/results/train_csa_layers12_13_m2_topk64/
 - `summary.json`
 - `run_config.json`
 
-### 5.3 启动全层训练
+### 5.3 启动 2048 全层训练
 
 ```bash
-bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_bs4.sh
+bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
 ```
 
 训练输出目录：
 
 ```text
-experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_bs4/
+experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_2048_bs4/
 ```
 
 关键输出：
@@ -249,7 +245,7 @@ experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_bs4/
 python experiments/z_image_indexer/train_csa_multilayer_indexer.py \
   --model-base-path /tmp/DiffSynth-Studio/models \
   --prompt-file experiments/z_image_indexer/configs/default_prompts_train.txt \
-  --output-dir experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_bs4 \
+  --output-dir experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_2048_bs4 \
   --steps 1000 \
   --height 512 \
   --width 512 \
@@ -320,7 +316,7 @@ cat experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_bs4/summa
 
 - `final_loss` 高于 `initial_loss`
 - 只有少数层 recall 提升
-- 训练速度极慢或显存频繁 OOM
+- 训练速度极慢
 
 这些不一定表示脚本失败，但说明该配置还需要继续调参。
 
@@ -360,15 +356,14 @@ experiments/z_image_indexer/results/eval_csa_layer12_m2_topk64/
 确认 Z-Image-Turbo 模型权重路径为 /tmp/DiffSynth-Studio/models。
 
 先运行：
-bash experiments/z_image_indexer/run_train_csa_m2_topk64.sh
+bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048.sh
 
 如果单层训练正常，再运行：
 bash experiments/z_image_indexer/run_train_csa_multilayer_l12_l13_m2_topk64.sh
 
 如果需要测试全部层训练，再运行：
-bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_bs4.sh
+bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
 
-如果全层训练 OOM，把脚本里的 --batch-size 4 改成 2；仍然 OOM 就改成 1。
 训练结束后返回对应 results 目录下的 summary.json、metrics.json 和 checkpoint 路径。
 ```
 
@@ -376,10 +371,10 @@ bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_bs4.sh
 
 正式迁移到新机器时，建议执行顺序是：
 
-1. 单层训练 smoke run：`steps=50`
-2. 单层训练完整 1000 步
-3. 双层训练 1000 步
-4. 全层训练 smoke run：`steps=50, batch_size=4`
-5. 如果显存稳定，再跑全层 1000 步
+1. 2048 单层训练 smoke run：`steps=50`
+2. 2048 单层训练完整 1000 步
+3. 2048 全层训练 smoke run：`steps=50, batch_size=4`
+4. 2048 全层训练完整 1000 步
+5. 如需真正利用多卡，需要后续补 DDP / 模型并行启动逻辑
 
-不要一上来直接跑更高分辨率、多卡联合训练或主模型联合训练。当前代码主要验证的是 indexer-only 蒸馏路线。
+当前代码主要验证的是 indexer-only 蒸馏路线；多卡服务器可以作为硬件目标，但脚本本身仍是单进程训练入口。
