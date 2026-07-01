@@ -13,7 +13,7 @@ from csa_common import (
     build_noise_latents,
     build_pipe,
     cache_prompt_embeds,
-    capture_teacher_qk,
+    capture_teacher_qk_layers,
     compress_teacher_probs,
     load_prompts,
     set_seed,
@@ -31,7 +31,18 @@ def parse_args():
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--num-inference-steps", type=int, default=4)
-    parser.add_argument("--layer-ids", type=str, default="12,13")
+    parser.add_argument(
+        "--layer-ids",
+        type=str,
+        default="12,13",
+        help='Comma-separated layer ids, ranges like "0-29", or "all".',
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1,
+        help="Number of prompt/timestep/latent samples accumulated per optimizer step.",
+    )
     parser.add_argument("--compression-rate", type=int, default=2)
     parser.add_argument("--compressed-topk", type=int, default=64)
     parser.add_argument("--rank", type=int, default=128)
@@ -44,33 +55,66 @@ def parse_args():
     return parser.parse_args()
 
 
-def parse_layer_ids(value: str) -> list[int]:
-    layer_ids = [int(v) for v in value.split(",") if v.strip()]
+def parse_layer_ids(value: str, num_layers: int) -> list[int]:
+    value = value.strip().lower()
+    if value == "all":
+        return list(range(num_layers))
+
+    layer_ids = []
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "-" in item:
+            start_text, end_text = item.split("-", 1)
+            start = int(start_text)
+            end = int(end_text)
+            if end < start:
+                raise ValueError(f"Invalid descending layer range: {item}")
+            layer_ids.extend(range(start, end + 1))
+        else:
+            layer_ids.append(int(item))
+
     if not layer_ids:
         raise ValueError("layer-ids cannot be empty")
-    return layer_ids
+
+    deduped = []
+    seen = set()
+    for layer_id in layer_ids:
+        if layer_id < 0 or layer_id >= num_layers:
+            raise ValueError(f"Layer id {layer_id} is out of range [0, {num_layers - 1}]")
+        if layer_id not in seen:
+            deduped.append(layer_id)
+            seen.add(layer_id)
+    return deduped
+
+
+def mean_dict(records: list[dict[str, float]], keys: list[str]) -> dict[str, float]:
+    return {key: float(sum(record[key] for record in records) / len(records)) for key in keys}
 
 
 def main():
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
     set_seed(args.seed)
-    layer_ids = parse_layer_ids(args.layer_ids)
+    if args.batch_size < 1:
+        raise ValueError("batch-size must be >= 1")
 
     pipe = build_pipe(args)
+    layer_ids = parse_layer_ids(args.layer_ids, num_layers=len(pipe.dit.layers))
     prompts = load_prompts(args.prompt_file)
     prompt_cache = cache_prompt_embeds(pipe, prompts)
 
     # Build one indexer per layer based on compressed key shape.
     indexers = {}
-    for layer_id in layer_ids:
-        sample_q, sample_k, x_real_len, _ = capture_teacher_qk(
-            pipe=pipe,
-            prompt_embeds=prompt_cache[prompts[0]],
-            latents=build_noise_latents(pipe, args.height, args.width, args.seed),
-            timestep=pipe.scheduler.timesteps[0].unsqueeze(0).to(device=pipe.device, dtype=pipe.torch_dtype),
-            layer_id=layer_id,
-        )
+    sample_captures = capture_teacher_qk_layers(
+        pipe=pipe,
+        prompt_embeds=prompt_cache[prompts[0]],
+        latents=build_noise_latents(pipe, args.height, args.width, args.seed),
+        timestep=pipe.scheduler.timesteps[0].unsqueeze(0).to(device=pipe.device, dtype=pipe.torch_dtype),
+        layer_ids=layer_ids,
+    )
+    for layer_id, (_, sample_k, x_real_len, _) in sample_captures.items():
         sample_k = sample_k[0, :x_real_len].float()
         compressed_k = build_compressed_pool(sample_k, args.compression_rate)
         input_dim = compressed_k.flatten(1).shape[-1]
@@ -86,56 +130,77 @@ def main():
     start = time.time()
 
     for step in range(1, args.steps + 1):
-        prompt = random.choice(prompts)
-        prompt_embeds = prompt_cache[prompt]
-        timestep = random.choice(pipe.scheduler.timesteps).unsqueeze(0).to(device=pipe.device, dtype=pipe.torch_dtype)
-        latents = build_noise_latents(pipe, args.height, args.width, args.seed + step)
-
-        layer_losses = []
-        layer_recalls = {}
-        layer_entropies = {}
-
-        for layer_id in layer_ids:
-            with torch.no_grad():
-                q, k, x_real_len, _ = capture_teacher_qk(pipe, prompt_embeds, latents, timestep, layer_id)
-                q = q[0, :x_real_len].float()
-                k = k[0, :x_real_len].float()
-                teacher_scores = torch.einsum("qhd,khd->qkh", q, k).mean(dim=-1) / (q.shape[-1] ** 0.5)
-                teacher_probs = F.softmax(teacher_scores, dim=-1)
-                teacher_block_probs = compress_teacher_probs(teacher_probs, args.compression_rate)
-                compressed_k = build_compressed_pool(k, args.compression_rate)
-
-            q_flat = q.flatten(1)
-            k_flat = compressed_k.flatten(1)
-            student_scores = indexers[layer_id](q_flat, k_flat)
-            student_log_probs = F.log_softmax(student_scores, dim=-1)
-            loss = F.kl_div(student_log_probs, teacher_block_probs, reduction="batchmean")
-            layer_losses.append(loss)
-
-            with torch.no_grad():
-                recall_k = min(args.recall_k, teacher_block_probs.shape[-1])
-                layer_recalls[str(layer_id)] = float(topk_recall(teacher_block_probs, student_scores, recall_k))
-                layer_entropies[str(layer_id)] = float(
-                    -(student_log_probs.exp() * student_log_probs).sum(dim=-1).mean().item()
-                )
-
-        total_loss = torch.stack(layer_losses).mean()
         optimizer.zero_grad(set_to_none=True)
-        total_loss.backward()
+
+        batch_losses = []
+        batch_recalls = []
+        batch_entropies = []
+
+        for batch_idx in range(args.batch_size):
+            sample_index = (step - 1) * args.batch_size + batch_idx + 1
+            prompt = random.choice(prompts)
+            prompt_embeds = prompt_cache[prompt]
+            timestep = random.choice(pipe.scheduler.timesteps).unsqueeze(0).to(device=pipe.device, dtype=pipe.torch_dtype)
+            latents = build_noise_latents(pipe, args.height, args.width, args.seed + sample_index)
+
+            layer_losses = []
+            layer_recalls = {}
+            layer_entropies = {}
+
+            with torch.no_grad():
+                layer_captures = capture_teacher_qk_layers(pipe, prompt_embeds, latents, timestep, layer_ids)
+
+            for layer_id in layer_ids:
+                with torch.no_grad():
+                    q, k, x_real_len, _ = layer_captures[layer_id]
+                    q = q[0, :x_real_len].float()
+                    k = k[0, :x_real_len].float()
+                    teacher_scores = torch.einsum("qhd,khd->qkh", q, k).mean(dim=-1) / (q.shape[-1] ** 0.5)
+                    teacher_probs = F.softmax(teacher_scores, dim=-1)
+                    teacher_block_probs = compress_teacher_probs(teacher_probs, args.compression_rate)
+                    compressed_k = build_compressed_pool(k, args.compression_rate)
+
+                q_flat = q.flatten(1)
+                k_flat = compressed_k.flatten(1)
+                student_scores = indexers[layer_id](q_flat, k_flat)
+                student_log_probs = F.log_softmax(student_scores, dim=-1)
+                loss = F.kl_div(student_log_probs, teacher_block_probs, reduction="batchmean")
+                layer_losses.append(loss)
+
+                with torch.no_grad():
+                    recall_k = min(args.recall_k, teacher_block_probs.shape[-1])
+                    layer_recalls[str(layer_id)] = float(topk_recall(teacher_block_probs, student_scores, recall_k))
+                    layer_entropies[str(layer_id)] = float(
+                        -(student_log_probs.exp() * student_log_probs).sum(dim=-1).mean().item()
+                    )
+
+            total_loss = torch.stack(layer_losses).mean()
+            (total_loss / args.batch_size).backward()
+            batch_losses.append(float(total_loss.detach().item()))
+            batch_recalls.append(layer_recalls)
+            batch_entropies.append(layer_entropies)
+
         optimizer.step()
 
+        layer_keys = [str(layer_id) for layer_id in layer_ids]
         record = {
             "step": step,
-            "loss": float(total_loss.item()),
-            "layer_recalls": layer_recalls,
-            "layer_entropies": layer_entropies,
+            "batch_size": args.batch_size,
+            "loss": float(sum(batch_losses) / len(batch_losses)),
+            "layer_recalls": mean_dict(batch_recalls, layer_keys),
+            "layer_entropies": mean_dict(batch_entropies, layer_keys),
         }
         history.append(record)
 
         if step == 1 or step % args.log_every == 0:
             elapsed = time.time() - start
-            recall_msg = " ".join([f"l{lid}_r@{args.recall_k}={layer_recalls[str(lid)]:.4f}" for lid in layer_ids])
-            print(f"step={step} loss={record['loss']:.6f} {recall_msg} elapsed={elapsed:.1f}s")
+            recall_msg = " ".join(
+                [f"l{lid}_r@{args.recall_k}={record['layer_recalls'][str(lid)]:.4f}" for lid in layer_ids]
+            )
+            print(
+                f"step={step} batch_size={args.batch_size} loss={record['loss']:.6f} "
+                f"{recall_msg} elapsed={elapsed:.1f}s"
+            )
 
     ckpt = {
         "layer_ids": layer_ids,
@@ -157,6 +222,7 @@ def main():
         "layer_ids": layer_ids,
         "compression_rate": args.compression_rate,
         "compressed_topk": args.compressed_topk,
+        "batch_size": args.batch_size,
         "height": args.height,
         "width": args.width,
         "recall_k": args.recall_k,
