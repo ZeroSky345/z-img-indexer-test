@@ -48,9 +48,29 @@ Important options:
 
 See `reports/STAGE14_2048_TRAINING_SUPPORT.md`.
 
+## LoRA Adapter Weight Training
+
+Train LoRA adapter weights while keeping the base Z-Image-Turbo DiT weights frozen:
+
+```bash
+bash experiments/z_image_indexer/run_train_lora_weights_2048_adapter.sh
+```
+
+This is the recommended entrypoint for preparing the LoRA weight used by the indexer teacher. It trains only LoRA adapter parameters and uses the public `ostris/zimage_turbo_training_adapter` preset to better preserve few-step Turbo behavior.
+
+After training, select one checkpoint and use it as the teacher LoRA:
+
+```bash
+mkdir -p ./models/lora
+cp ./models/lora/z_image_turbo_lora_2048_adapter/epoch-4.safetensors \
+  ./models/lora/z_image_turbo_lora.safetensors
+```
+
+See `reports/STAGE15_LORA_WEIGHT_TRAINING.md`.
+
 ## LoRA-Teacher Indexer Training
 
-Use an external trained LoRA checkpoint as the teacher when distilling the indexer:
+Use the trained LoRA checkpoint as the teacher condition when distilling the indexer:
 
 ```bash
 bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
