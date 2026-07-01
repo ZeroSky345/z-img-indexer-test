@@ -1,6 +1,6 @@
 # Z-Image Indexer 训练服务器启动说明
 
-本文档说明如何在训练服务器上直接启动当前项目的 `Z-Image-Turbo + LoRA 权重 + CSA/indexer` 训练与评测。
+本文档说明如何在训练服务器上直接启动当前项目的 `Z-Image-Turbo + LoRA adapter 权重 + CSA/indexer` 训练与评测。
 
 公开仓库：
 
