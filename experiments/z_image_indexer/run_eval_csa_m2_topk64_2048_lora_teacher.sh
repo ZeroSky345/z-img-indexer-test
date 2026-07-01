@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Evaluate single-layer CSA indexer replacement using the same external LoRA
+# Evaluate single-layer CSA indexer replacement using the selected/trained LoRA weight.
 # weight for both dense and sparse generation.
 
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1,2,3}
