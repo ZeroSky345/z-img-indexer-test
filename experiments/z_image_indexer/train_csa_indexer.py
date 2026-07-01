@@ -5,7 +5,6 @@ import random
 import time
 
 import torch
-import torch.nn.functional as F
 
 from csa_common import (
     BilinearIndexer,
@@ -14,10 +13,9 @@ from csa_common import (
     build_pipe,
     cache_prompt_embeds,
     capture_teacher_qk,
-    compress_teacher_probs,
+    csa_distill_loss_metrics,
     load_prompts,
     set_seed,
-    topk_recall,
 )
 
 
@@ -38,6 +36,8 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--recall-k", type=int, default=16)
+    parser.add_argument("--query-chunk-size", type=int, default=0)
+    parser.add_argument("--metrics-max-queries", type=int, default=2048)
     parser.add_argument("--log-every", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda")
@@ -80,25 +80,20 @@ def main():
             q, k, x_real_len, _ = capture_teacher_qk(pipe, prompt_embeds, latents, timestep, args.layer_id)
             q = q[0, :x_real_len].float()
             k = k[0, :x_real_len].float()
-            teacher_scores = torch.einsum("qhd,khd->qkh", q, k).mean(dim=-1) / (q.shape[-1] ** 0.5)
-            teacher_probs = F.softmax(teacher_scores, dim=-1)
-            teacher_block_probs = compress_teacher_probs(teacher_probs, args.compression_rate)
-            compressed_k = build_compressed_pool(k, args.compression_rate)
 
-        q_flat = q.flatten(1)
-        k_flat = compressed_k.flatten(1)
-        student_scores = indexer(q_flat, k_flat)
-        student_log_probs = F.log_softmax(student_scores, dim=-1)
-        loss = F.kl_div(student_log_probs, teacher_block_probs, reduction="batchmean")
+        loss, recall, entropy = csa_distill_loss_metrics(
+            indexer=indexer,
+            image_q=q,
+            image_k=k,
+            compression_rate=args.compression_rate,
+            recall_k=args.recall_k,
+            query_chunk_size=args.query_chunk_size,
+            metrics_max_queries=args.metrics_max_queries,
+        )
 
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
-
-        with torch.no_grad():
-            recall_k = min(args.recall_k, teacher_block_probs.shape[-1])
-            recall = topk_recall(teacher_block_probs, student_scores, recall_k)
-            entropy = -(student_log_probs.exp() * student_log_probs).sum(dim=-1).mean().item()
 
         record = {
             "step": step,
@@ -111,7 +106,7 @@ def main():
         if step == 1 or step % args.log_every == 0:
             elapsed = time.time() - start
             print(
-                f"step={step} loss={record['loss']:.6f} recall@{recall_k}={record['recall_at_k']:.4f} "
+                f"step={step} loss={record['loss']:.6f} recall@{args.recall_k}={record['recall_at_k']:.4f} "
                 f"entropy={record['student_entropy']:.4f} elapsed={elapsed:.1f}s"
             )
 
@@ -136,6 +131,8 @@ def main():
         "height": args.height,
         "width": args.width,
         "recall_k": args.recall_k,
+        "query_chunk_size": args.query_chunk_size,
+        "metrics_max_queries": args.metrics_max_queries,
         "initial_loss": history[0]["loss"],
         "final_loss": history[-1]["loss"],
         "initial_recall_at_k": history[0]["recall_at_k"],
