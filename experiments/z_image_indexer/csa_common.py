@@ -4,6 +4,7 @@ import types
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 
 from train_indexer_distill import (
     DEFAULT_PROMPTS,
@@ -95,6 +96,56 @@ def compress_teacher_probs(teacher_probs: torch.Tensor, compression_rate: int) -
     block_probs = teacher_probs.view(q_len, block_count, compression_rate).sum(dim=-1)
     block_probs = block_probs / block_probs.sum(dim=-1, keepdim=True).clamp_min(1e-8)
     return block_probs
+
+
+def csa_distill_loss_metrics(
+    indexer,
+    image_q: torch.Tensor,
+    image_k: torch.Tensor,
+    compression_rate: int,
+    recall_k: int,
+    query_chunk_size: int = 0,
+    metrics_max_queries: int = 2048,
+):
+    num_queries = image_q.shape[0]
+    compressed_k = build_compressed_pool(image_k, compression_rate)
+    k_flat = compressed_k.flatten(1)
+    chunk_size = query_chunk_size if query_chunk_size and query_chunk_size > 0 else num_queries
+    metrics_limit = num_queries if metrics_max_queries <= 0 else min(metrics_max_queries, num_queries)
+
+    total_loss = None
+    recall_total = 0.0
+    entropy_total = 0.0
+    metrics_seen = 0
+
+    for start in range(0, num_queries, chunk_size):
+        end = min(start + chunk_size, num_queries)
+        q_chunk = image_q[start:end]
+
+        with torch.no_grad():
+            teacher_scores = torch.einsum("qhd,khd->qkh", q_chunk, image_k).mean(dim=-1) / (q_chunk.shape[-1] ** 0.5)
+            teacher_probs = F.softmax(teacher_scores, dim=-1)
+            teacher_block_probs = compress_teacher_probs(teacher_probs, compression_rate)
+
+        q_flat = q_chunk.flatten(1)
+        student_scores = indexer(q_flat, k_flat)
+        student_log_probs = F.log_softmax(student_scores, dim=-1)
+        chunk_loss = F.kl_div(student_log_probs, teacher_block_probs, reduction="batchmean")
+        weighted_loss = chunk_loss * ((end - start) / num_queries)
+        total_loss = weighted_loss if total_loss is None else total_loss + weighted_loss
+
+        remaining_metrics = metrics_limit - metrics_seen
+        if remaining_metrics > 0:
+            take = min(end - start, remaining_metrics)
+            with torch.no_grad():
+                recall_at = min(recall_k, teacher_block_probs.shape[-1])
+                recall = topk_recall(teacher_block_probs[:take], student_scores[:take], recall_at)
+                entropy = -(student_log_probs[:take].exp() * student_log_probs[:take]).sum(dim=-1).mean().item()
+                recall_total += float(recall) * take
+                entropy_total += float(entropy) * take
+                metrics_seen += take
+
+    return total_loss, recall_total / metrics_seen, entropy_total / metrics_seen
 
 
 def topk_recall(teacher_scores: torch.Tensor, student_scores: torch.Tensor, k: int) -> float:
