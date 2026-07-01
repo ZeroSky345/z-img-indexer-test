@@ -61,6 +61,25 @@ The adapter-assisted path is recommended first for Turbo.
 
 See `reports/STAGE15_Z_IMAGE_TURBO_LORA_2048.md`.
 
+## LoRA-Teacher Indexer Training
+
+Use a trained LoRA checkpoint as the teacher when distilling the indexer:
+
+```bash
+bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
+bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh
+```
+
+By default these scripts use:
+
+```bash
+./models/train/Z-Image-Turbo_lora_2048_adapter/epoch-4.safetensors
+```
+
+Override with `TEACHER_LORA_PATH=/path/to/lora.safetensors`.
+
+See `reports/STAGE16_LORA_TEACHER_INDEXER.md`.
+
 ## 2048 training support
 
 High-resolution entrypoints:
