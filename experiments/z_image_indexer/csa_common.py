@@ -1,5 +1,6 @@
 import json
 import math
+import types
 from pathlib import Path
 
 import torch
@@ -11,6 +12,8 @@ from train_indexer_distill import (
     build_pipe,
     capture_prompt_embedder,
     capture_teacher_qk,
+    patchify_turbo_inputs,
+    project_qk,
     set_seed,
 )
 
@@ -29,6 +32,48 @@ def load_prompts(prompt_file: str | None, fallback_count: int | None = None) -> 
 
 def cache_prompt_embeds(pipe, prompts: list[str]) -> dict[str, torch.Tensor]:
     return {prompt: capture_prompt_embedder(pipe, prompt) for prompt in prompts}
+
+
+def capture_teacher_qk_layers(pipe, prompt_embeds, latents, timestep, layer_ids: list[int]):
+    dit = pipe.dit
+    unified, unified_freqs_cis, t_noisy, x_real_len, cap_real_len = patchify_turbo_inputs(
+        dit, latents, prompt_embeds, timestep
+    )
+
+    captured = {}
+    originals = {}
+
+    def make_patched_forward(layer_id: int, original_forward):
+        def patched_forward(self, hidden_states, freqs_cis, attention_mask):
+            q, k = project_qk(self, hidden_states, freqs_cis)
+            captured[layer_id] = (q.detach(), k.detach())
+            return original_forward(hidden_states, freqs_cis, attention_mask)
+
+        return patched_forward
+
+    for layer_id in layer_ids:
+        attention = dit.layers[layer_id].attention
+        originals[layer_id] = attention.forward
+        attention.forward = types.MethodType(make_patched_forward(layer_id, originals[layer_id]), attention)
+
+    try:
+        max_layer_id = max(layer_ids)
+        for idx, layer in enumerate(dit.layers):
+            unified = layer(x=unified, attn_mask=None, freqs_cis=unified_freqs_cis, adaln_input=t_noisy)
+            if idx >= max_layer_id:
+                break
+    finally:
+        for layer_id, original_forward in originals.items():
+            dit.layers[layer_id].attention.forward = original_forward
+
+    missing = [layer_id for layer_id in layer_ids if layer_id not in captured]
+    if missing:
+        raise RuntimeError(f"Failed to capture Q/K for layers: {missing}")
+
+    return {
+        layer_id: (captured[layer_id][0], captured[layer_id][1], x_real_len, cap_real_len)
+        for layer_id in layer_ids
+    }
 
 
 def build_compressed_pool(image_k: torch.Tensor, compression_rate: int) -> torch.Tensor:
