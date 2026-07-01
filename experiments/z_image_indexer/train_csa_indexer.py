@@ -8,6 +8,7 @@ import torch
 
 from csa_common import (
     BilinearIndexer,
+    apply_teacher_lora,
     build_compressed_pool,
     build_noise_latents,
     build_pipe,
@@ -23,6 +24,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-id", type=str, default="Tongyi-MAI/Z-Image-Turbo")
     parser.add_argument("--model-base-path", type=str, default=None)
+    parser.add_argument("--teacher-lora-path", type=str, default=None)
+    parser.add_argument("--teacher-lora-alpha", type=float, default=1.0)
     parser.add_argument("--prompt-file", type=str, default=None)
     parser.add_argument("--output-dir", type=str, required=True)
     parser.add_argument("--steps", type=int, default=1000)
@@ -50,6 +53,7 @@ def main():
     set_seed(args.seed)
 
     pipe = build_pipe(args)
+    teacher_lora_loaded = apply_teacher_lora(pipe, args.teacher_lora_path, args.teacher_lora_alpha)
     prompts = load_prompts(args.prompt_file)
     prompt_cache = cache_prompt_embeds(pipe, prompts)
 
@@ -131,6 +135,9 @@ def main():
         "height": args.height,
         "width": args.width,
         "recall_k": args.recall_k,
+        "teacher_lora_path": args.teacher_lora_path,
+        "teacher_lora_alpha": args.teacher_lora_alpha,
+        "teacher_lora_loaded": teacher_lora_loaded,
         "query_chunk_size": args.query_chunk_size,
         "metrics_max_queries": args.metrics_max_queries,
         "initial_loss": history[0]["loss"],
