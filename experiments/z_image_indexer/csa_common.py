@@ -35,6 +35,15 @@ def cache_prompt_embeds(pipe, prompts: list[str]) -> dict[str, torch.Tensor]:
     return {prompt: capture_prompt_embedder(pipe, prompt) for prompt in prompts}
 
 
+def apply_teacher_lora(pipe, lora_path: str | None, lora_alpha: float = 1.0):
+    if not lora_path:
+        return False
+    pipe.load_lora(pipe.dit, lora_path, alpha=lora_alpha)
+    pipe.requires_grad_(False)
+    pipe.eval()
+    return True
+
+
 def capture_teacher_qk_layers(pipe, prompt_embeds, latents, timestep, layer_ids: list[int]):
     dit = pipe.dit
     unified, unified_freqs_cis, t_noisy, x_real_len, cap_real_len = patchify_turbo_inputs(
