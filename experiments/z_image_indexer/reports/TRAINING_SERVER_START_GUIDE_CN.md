@@ -16,6 +16,36 @@
 
 ## 1. 当前可以启动的训练任务
 
+### 任务 0：Z-Image-Turbo LoRA 2048 训练
+
+这是当前新增的主模型 LoRA 训练入口，和 indexer 训练是两条路线。
+
+推荐先使用带 adapter 的 Turbo LoRA 训练：
+
+```bash
+bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048_adapter.sh
+```
+
+普通 LoRA 入口：
+
+```bash
+bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048.sh
+```
+
+配置：
+
+- 分辨率：`2048x2048`
+- `lora_base_model=dit`
+- `lora_target_modules=to_q,to_k,to_v,to_out.0,w1,w2,w3`
+- `lora_rank=32`
+- 默认 `NUM_PROCESSES=4`
+
+说明：
+
+- LoRA 会改变主模型 DiT 的生成行为。
+- indexer 训练不会改主模型，只训练 sparse routing/indexer。
+- 如果最终目标是“LoRA 后的 sparse inference”，建议先训 LoRA，再固定 LoRA 后训练 indexer。
+
 ### 任务 A：单层 CSA indexer 训练
 
 这是当前最稳的默认入口，适合先确认环境、模型路径和训练脚本是否可用。
@@ -355,11 +385,11 @@ experiments/z_image_indexer/results/eval_csa_layer12_m2_topk64/
 进入仓库根目录后，确认 Python 环境可以 import torch 和 diffsynth，
 确认 Z-Image-Turbo 模型权重路径为 /tmp/DiffSynth-Studio/models。
 
-先运行：
-bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048.sh
+先运行 LoRA：
+bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048_adapter.sh
 
-如果单层训练正常，再运行：
-bash experiments/z_image_indexer/run_train_csa_multilayer_l12_l13_m2_topk64.sh
+再运行单层 indexer：
+bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048.sh
 
 如果需要测试全部层训练，再运行：
 bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
@@ -371,10 +401,12 @@ bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
 
 正式迁移到新机器时，建议执行顺序是：
 
-1. 2048 单层训练 smoke run：`steps=50`
-2. 2048 单层训练完整 1000 步
-3. 2048 全层训练 smoke run：`steps=50, batch_size=4`
-4. 2048 全层训练完整 1000 步
-5. 如需真正利用多卡，需要后续补 DDP / 模型并行启动逻辑
+1. 2048 LoRA 训练，优先使用 `run_train_z_image_turbo_lora_2048_adapter.sh`
+2. 验证 LoRA 生成质量
+3. 2048 单层 indexer 训练 smoke run：`steps=50`
+4. 2048 单层 indexer 训练完整 1000 步
+5. 2048 全层 indexer 训练 smoke run：`steps=50, batch_size=4`
+6. 2048 全层 indexer 训练完整 1000 步
+7. 如需真正利用多卡训练 indexer，需要后续补 DDP / 模型并行启动逻辑
 
 当前代码主要验证的是 indexer-only 蒸馏路线；多卡服务器可以作为硬件目标，但脚本本身仍是单进程训练入口。
