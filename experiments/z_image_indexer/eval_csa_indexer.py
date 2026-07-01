@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 
-from csa_common import build_pipe, load_prompts, set_seed
+from csa_common import apply_teacher_lora, build_pipe, load_prompts, set_seed
 from stage6_generate_compare_csa_single_layer import load_indexer, make_csa_model_fn
 
 
@@ -10,6 +10,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-id", type=str, default="Tongyi-MAI/Z-Image-Turbo")
     parser.add_argument("--model-base-path", type=str, default=None)
+    parser.add_argument("--teacher-lora-path", type=str, default=None)
+    parser.add_argument("--teacher-lora-alpha", type=float, default=1.0)
     parser.add_argument("--prompt-file", type=str, required=True)
     parser.add_argument("--indexer-ckpt", type=str, required=True)
     parser.add_argument("--output-dir", type=str, required=True)
@@ -31,6 +33,7 @@ def main():
 
     prompts = load_prompts(args.prompt_file)
     pipe = build_pipe(args)
+    teacher_lora_loaded = apply_teacher_lora(pipe, args.teacher_lora_path, args.teacher_lora_alpha)
     indexer = load_indexer(args.indexer_ckpt, args.device)
     original_model_fn = pipe.model_fn
 
@@ -88,6 +91,9 @@ def main():
             "layer_id": args.layer_id,
             "compression_rate": args.compression_rate,
             "compressed_topk": args.compressed_topk,
+            "teacher_lora_path": args.teacher_lora_path,
+            "teacher_lora_alpha": args.teacher_lora_alpha,
+            "teacher_lora_loaded": teacher_lora_loaded,
             "dense_time_sec": dense_time,
             "sparse_time_sec": sparse_time,
             "time_ratio_sparse_over_dense": sparse_time / dense_time if dense_time > 0 else None,
@@ -103,6 +109,9 @@ def main():
         "layer_id": args.layer_id,
         "compression_rate": args.compression_rate,
         "compressed_topk": args.compressed_topk,
+        "teacher_lora_path": args.teacher_lora_path,
+        "teacher_lora_alpha": args.teacher_lora_alpha,
+        "teacher_lora_loaded": teacher_lora_loaded,
         "num_prompts": len(records),
         "mean_dense_time_sec": float(sum(r["dense_time_sec"] for r in records) / len(records)),
         "mean_sparse_time_sec": float(sum(r["sparse_time_sec"] for r in records) / len(records)),
