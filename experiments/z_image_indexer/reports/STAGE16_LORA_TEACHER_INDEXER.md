@@ -42,32 +42,43 @@ Training the indexer against the base model and then applying LoRA later can cre
 
 ## Recommended Sequence
 
-1. Prepare an external LoRA weight:
+1. Train or prepare a LoRA adapter-weight checkpoint.
+
+Recommended LoRA weight training command:
+
+```bash
+bash experiments/z_image_indexer/run_train_lora_weights_2048_adapter.sh
+```
+
+This trains only LoRA adapter weights. The base Z-Image-Turbo DiT weights stay frozen.
+
+2. Put the selected LoRA checkpoint at the default teacher path:
 
 ```bash
 mkdir -p ./models/lora
-cp /path/to/z_image_turbo_lora.safetensors ./models/lora/z_image_turbo_lora.safetensors
+cp ./models/lora/z_image_turbo_lora_2048_adapter/epoch-4.safetensors \
+  ./models/lora/z_image_turbo_lora.safetensors
 ```
 
-2. Train a single-layer LoRA-teacher indexer:
+3. Train a single-layer LoRA-teacher indexer:
 
 ```bash
 bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
 ```
 
-3. Evaluate the single-layer LoRA-teacher indexer:
+4. Evaluate the single-layer LoRA-teacher indexer:
 
 ```bash
 bash experiments/z_image_indexer/run_eval_csa_m2_topk64_2048_lora_teacher.sh
 ```
 
-4. Train the all-layer LoRA-teacher indexer:
+5. Train the all-layer LoRA-teacher indexer:
 
 ```bash
 bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh
 ```
 
-5. Evaluate the all-layer LoRA-teacher indexer:
+6. Evaluate the all-layer LoRA-teacher indexer:
 
 ```bash
 bash experiments/z_image_indexer/run_eval_csa_all_layers_m2_topk64_2048_lora_teacher.sh
@@ -90,9 +101,10 @@ bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_te
 
 ## What Is Trained
 
-The LoRA is loaded into the frozen teacher DiT. The only trainable module remains the indexer.
+There are two separate trainable targets:
 
-This project does not train the Z-Image-Turbo LoRA. The LoRA is treated as an external teacher weight.
+- LoRA adapter-weight training: trains only LoRA adapter parameters attached to the frozen Z-Image-Turbo DiT.
+- Indexer distillation: loads the selected LoRA into the frozen teacher DiT and trains only the CSA/indexer parameters.
 
 This is not LoRA-on-indexer. The indexer itself is already small, so training its full parameters is simpler and cleaner than adding LoRA to it.
 
