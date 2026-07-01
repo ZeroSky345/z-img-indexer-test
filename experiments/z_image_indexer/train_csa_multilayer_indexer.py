@@ -5,7 +5,6 @@ import random
 import time
 
 import torch
-import torch.nn.functional as F
 
 from csa_common import (
     BilinearIndexer,
@@ -14,10 +13,9 @@ from csa_common import (
     build_pipe,
     cache_prompt_embeds,
     capture_teacher_qk_layers,
-    compress_teacher_probs,
+    csa_distill_loss_metrics,
     load_prompts,
     set_seed,
-    topk_recall,
 )
 
 
@@ -49,6 +47,8 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--recall-k", type=int, default=16)
+    parser.add_argument("--query-chunk-size", type=int, default=0)
+    parser.add_argument("--metrics-max-queries", type=int, default=2048)
     parser.add_argument("--log-every", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda")
@@ -143,7 +143,7 @@ def main():
             timestep = random.choice(pipe.scheduler.timesteps).unsqueeze(0).to(device=pipe.device, dtype=pipe.torch_dtype)
             latents = build_noise_latents(pipe, args.height, args.width, args.seed + sample_index)
 
-            layer_losses = []
+            layer_loss_values = []
             layer_recalls = {}
             layer_entropies = {}
 
@@ -155,28 +155,22 @@ def main():
                     q, k, x_real_len, _ = layer_captures[layer_id]
                     q = q[0, :x_real_len].float()
                     k = k[0, :x_real_len].float()
-                    teacher_scores = torch.einsum("qhd,khd->qkh", q, k).mean(dim=-1) / (q.shape[-1] ** 0.5)
-                    teacher_probs = F.softmax(teacher_scores, dim=-1)
-                    teacher_block_probs = compress_teacher_probs(teacher_probs, args.compression_rate)
-                    compressed_k = build_compressed_pool(k, args.compression_rate)
 
-                q_flat = q.flatten(1)
-                k_flat = compressed_k.flatten(1)
-                student_scores = indexers[layer_id](q_flat, k_flat)
-                student_log_probs = F.log_softmax(student_scores, dim=-1)
-                loss = F.kl_div(student_log_probs, teacher_block_probs, reduction="batchmean")
-                layer_losses.append(loss)
+                loss, recall, entropy = csa_distill_loss_metrics(
+                    indexer=indexers[layer_id],
+                    image_q=q,
+                    image_k=k,
+                    compression_rate=args.compression_rate,
+                    recall_k=args.recall_k,
+                    query_chunk_size=args.query_chunk_size,
+                    metrics_max_queries=args.metrics_max_queries,
+                )
+                (loss / (args.batch_size * len(layer_ids))).backward()
+                layer_loss_values.append(float(loss.detach().item()))
+                layer_recalls[str(layer_id)] = float(recall)
+                layer_entropies[str(layer_id)] = float(entropy)
 
-                with torch.no_grad():
-                    recall_k = min(args.recall_k, teacher_block_probs.shape[-1])
-                    layer_recalls[str(layer_id)] = float(topk_recall(teacher_block_probs, student_scores, recall_k))
-                    layer_entropies[str(layer_id)] = float(
-                        -(student_log_probs.exp() * student_log_probs).sum(dim=-1).mean().item()
-                    )
-
-            total_loss = torch.stack(layer_losses).mean()
-            (total_loss / args.batch_size).backward()
-            batch_losses.append(float(total_loss.detach().item()))
+            batch_losses.append(float(sum(layer_loss_values) / len(layer_loss_values)))
             batch_recalls.append(layer_recalls)
             batch_entropies.append(layer_entropies)
 
@@ -226,6 +220,8 @@ def main():
         "height": args.height,
         "width": args.width,
         "recall_k": args.recall_k,
+        "query_chunk_size": args.query_chunk_size,
+        "metrics_max_queries": args.metrics_max_queries,
         "initial_loss": first["loss"],
         "final_loss": last["loss"],
         "initial_layer_recalls": first["layer_recalls"],
