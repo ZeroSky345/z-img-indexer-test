@@ -1,0 +1,28 @@
+{
+  "model": "Tongyi-MAI/Z-Image-Turbo",
+  "route": "CSA-like",
+  "training_mode": "indexer-only",
+  "teacher": "base Z-Image-Turbo + LoRA",
+  "teacher_lora_path": "./models/train/Z-Image-Turbo_lora_2048_adapter/epoch-4.safetensors",
+  "teacher_lora_alpha": 1.0,
+  "layer_ids": "all",
+  "batch_size": 4,
+  "compression_rate": 2,
+  "compressed_topk": 64,
+  "rank": 128,
+  "steps": 1000,
+  "height": 2048,
+  "width": 2048,
+  "num_inference_steps": 4,
+  "lr": 0.001,
+  "weight_decay": 0.0,
+  "recall_k": 16,
+  "query_chunk_size": 512,
+  "metrics_max_queries": 2048,
+  "recommended_script": "run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh",
+  "notes": [
+    "Train the LoRA first, then use the resulting LoRA checkpoint as the teacher for indexer distillation.",
+    "The indexer learns attention routing from the LoRA-adapted teacher distribution.",
+    "The current default assumes the adapter-assisted LoRA output path."
+  ]
+}
