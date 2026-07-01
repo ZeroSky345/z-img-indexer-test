@@ -8,24 +8,28 @@
 
 ## 1. 当前训练内容
 
-本项目当前不训练 `Z-Image-Turbo` 主模型，也不训练主模型 LoRA。
+本项目当前不做 `Z-Image-Turbo` 主模型全量训练；LoRA 部分的含义是训练 LoRA adapter 权重。
 
-当前只训练：
+注意：`--lora_base_model dit` 表示 LoRA adapter 挂到 DiT 上，base DiT 原始参数冻结，只更新 LoRA adapter 参数，不是全量训练主模型 DiT。
 
+当前训练对象分两类：
+
+- LoRA adapter 权重
 - CSA-like sparse routing indexer
 - 单层 indexer：`layer12`
 - 全层 indexer：`layer_ids=all`
 
 LoRA 的角色是：
 
-- 作为外部已经训练好的权重输入
+- 先通过 LoRA adapter 权重训练得到 `.safetensors`
 - 在 indexer 蒸馏时加载到 frozen teacher DiT
 - 让 indexer 学习 `Z-Image-Turbo + LoRA` 后的 attention/QK 分布
 
 也就是说，训练目标是：
 
 ```text
-frozen Z-Image-Turbo + external LoRA -> teacher
+frozen Z-Image-Turbo + trainable LoRA adapter -> LoRA weight
+frozen Z-Image-Turbo + selected LoRA weight -> teacher
 trainable CSA/indexer -> student
 ```
 
@@ -43,6 +47,8 @@ trainable CSA/indexer -> student
 
 推荐启动脚本：
 
+- `experiments/z_image_indexer/run_train_lora_weights_2048_adapter.sh`
+- `experiments/z_image_indexer/run_train_lora_weights_2048.sh`
 - `experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh`
 - `experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh`
 - `experiments/z_image_indexer/run_eval_csa_m2_topk64_2048_lora_teacher.sh`
@@ -94,13 +100,13 @@ PY
 --model-base-path /tmp/DiffSynth-Studio/models
 ```
 
-LoRA 权重需要提前准备好。默认路径：
+LoRA 权重默认路径：
 
 ```bash
 ./models/lora/z_image_turbo_lora.safetensors
 ```
 
-推荐放置方式：
+如果已经有 LoRA 权重，直接放置：
 
 ```bash
 mkdir -p ./models/lora
@@ -119,7 +125,48 @@ LoRA alpha 默认：
 export TEACHER_LORA_ALPHA=1.0
 ```
 
-## 5. 环境变量
+## 5. LoRA adapter 权重训练
+
+推荐先训练 LoRA adapter 权重：
+
+```bash
+bash experiments/z_image_indexer/run_train_lora_weights_2048_adapter.sh
+```
+
+这个脚本会：
+
+- 下载示例数据 `DiffSynth-Studio/diffsynth_example_dataset`
+- 下载 `ostris/zimage_turbo_training_adapter`
+- 以 2048x2048 配置训练 LoRA adapter 权重
+- 冻结 Z-Image-Turbo base DiT，只更新 LoRA adapter 参数
+
+默认输出目录：
+
+```text
+./models/lora/z_image_turbo_lora_2048_adapter/
+```
+
+训练后选择一个 checkpoint 作为 indexer teacher LoRA，例如：
+
+```bash
+mkdir -p ./models/lora
+cp ./models/lora/z_image_turbo_lora_2048_adapter/epoch-4.safetensors \
+  ./models/lora/z_image_turbo_lora.safetensors
+```
+
+也可以不复制，直接设置：
+
+```bash
+export TEACHER_LORA_PATH=./models/lora/z_image_turbo_lora_2048_adapter/epoch-4.safetensors
+```
+
+如果不想使用 preset adapter，可以运行普通 LoRA 训练入口：
+
+```bash
+bash experiments/z_image_indexer/run_train_lora_weights_2048.sh
+```
+
+## 6. 环境变量
 
 建议：
 
@@ -133,7 +180,7 @@ export TEACHER_LORA_ALPHA=1.0
 
 注意：当前 indexer 训练脚本仍是单进程入口；`CUDA_VISIBLE_DEVICES=0,1,2,3` 表示面向多卡服务器环境，但不等于已经实现 DDP/model parallel。
 
-## 6. 单层 indexer 训练
+## 7. 单层 indexer 训练
 
 推荐先跑单层，确认 LoRA teacher、数据 prompt、模型路径全部正常。
 
@@ -179,7 +226,7 @@ experiments/z_image_indexer/results/train_csa_layer12_m2_topk64_2048_lora_teache
 - `summary.json`
 - `run_config.json`
 
-## 7. 全层 indexer 训练
+## 8. 全层 indexer 训练
 
 单层确认无误后，启动全层训练：
 
@@ -227,7 +274,7 @@ experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_2048_lora_tea
 - `summary.json`
 - `run_config.json`
 
-## 8. 单层评测
+## 9. 单层评测
 
 训练完单层 indexer 后执行：
 
@@ -254,7 +301,7 @@ bash experiments/z_image_indexer/run_eval_csa_m2_topk64_2048_lora_teacher.sh
 experiments/z_image_indexer/results/eval_csa_layer12_m2_topk64_2048_lora_teacher/
 ```
 
-## 9. 全层评测
+## 10. 全层评测
 
 训练完全层 indexer 后执行：
 
@@ -290,7 +337,7 @@ experiments/z_image_indexer/results/eval_csa_all_layers_m2_topk64_2048_lora_teac
 - `prompt_*_csa_multilayer.png`
 - `prompt_*_compare_csa_multilayer.png`
 
-## 10. 指标查看
+## 11. 指标查看
 
 训练后先看：
 
@@ -321,25 +368,37 @@ cat experiments/z_image_indexer/results/eval_csa_all_layers_m2_topk64_2048_lora_
 - `mean_image_mse`
 - `teacher_lora_loaded`
 
-## 11. 推荐执行顺序
+## 12. 推荐执行顺序
 
-1. 准备外部 LoRA 权重。
-2. 把 LoRA 权重放到 `./models/lora/z_image_turbo_lora.safetensors`，或设置 `TEACHER_LORA_PATH`。
+1. 训练 LoRA adapter 权重，推荐运行 `run_train_lora_weights_2048_adapter.sh`。
+2. 选择一个 LoRA checkpoint，放到 `./models/lora/z_image_turbo_lora.safetensors`，或设置 `TEACHER_LORA_PATH`。
 3. 跑单层 LoRA-teacher indexer 训练。
 4. 跑单层 LoRA-teacher indexer 评测。
 5. 跑全层 LoRA-teacher indexer 训练。
 6. 跑全层 LoRA-teacher indexer 评测。
 7. 汇总 `summary.json`、`metrics.json` 和对比图。
 
-## 12. 给执行者的最短说明
+## 13. 给执行者的最短说明
 
 ```text
 请 clone https://github.com/ZeroSky345/z-img-indexer-test，
 进入仓库后准备好 Python / CUDA / DiffSynth 环境。
-把已经训练好的 Z-Image-Turbo LoRA 权重放到：
+
+先训练 LoRA adapter 权重：
+bash experiments/z_image_indexer/run_train_lora_weights_2048_adapter.sh
+
+选择输出 checkpoint，例如：
+./models/lora/z_image_turbo_lora_2048_adapter/epoch-4.safetensors
+
+复制为 indexer teacher LoRA：
+mkdir -p ./models/lora
+cp ./models/lora/z_image_turbo_lora_2048_adapter/epoch-4.safetensors \
+  ./models/lora/z_image_turbo_lora.safetensors
+
+如果已经有训练好的 LoRA 权重，也可以直接放到：
 ./models/lora/z_image_turbo_lora.safetensors
 
-然后依次执行：
+然后依次训练和评测 indexer：
 bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
 bash experiments/z_image_indexer/run_eval_csa_m2_topk64_2048_lora_teacher.sh
 bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh
