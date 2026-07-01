@@ -48,6 +48,19 @@ Important options:
 
 See `reports/STAGE14_2048_TRAINING_SUPPORT.md`.
 
+## Z-Image-Turbo LoRA 2048
+
+LoRA entrypoints:
+
+```bash
+bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048_adapter.sh
+bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048.sh
+```
+
+The adapter-assisted path is recommended first for Turbo.
+
+See `reports/STAGE15_Z_IMAGE_TURBO_LORA_2048.md`.
+
 ## 2048 training support
 
 High-resolution entrypoints:
