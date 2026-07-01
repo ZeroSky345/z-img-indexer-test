@@ -3,7 +3,7 @@
   "route": "CSA-like",
   "training_mode": "indexer-only",
   "teacher": "base Z-Image-Turbo + LoRA",
-  "teacher_lora_path": "./models/train/Z-Image-Turbo_lora_2048_adapter/epoch-4.safetensors",
+  "teacher_lora_path": "./models/lora/z_image_turbo_lora.safetensors",
   "teacher_lora_alpha": 1.0,
   "layer_ids": "all",
   "batch_size": 4,
@@ -23,6 +23,6 @@
   "notes": [
     "Train the LoRA first, then use the resulting LoRA checkpoint as the teacher for indexer distillation.",
     "The indexer learns attention routing from the LoRA-adapted teacher distribution.",
-    "The current default assumes the adapter-assisted LoRA output path."
+    "The current default assumes an externally prepared LoRA weight copied into ./models/lora/z_image_turbo_lora.safetensors."
   ]
 }
