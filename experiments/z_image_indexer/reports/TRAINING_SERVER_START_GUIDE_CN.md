@@ -48,7 +48,7 @@ bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048.sh
 
 ### 任务 A：单层 CSA indexer 训练
 
-这是当前最稳的默认入口，适合先确认环境、模型路径和训练脚本是否可用。
+这是当前最稳的 indexer 入口。若已经训练 LoRA，优先使用 LoRA-teacher 版本。
 
 配置：
 
@@ -61,10 +61,16 @@ bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048.sh
 - 推理步数：`4`
 - 训练模式：只训练 indexer，不训练主模型
 
-启动命令：
+基础 teacher 启动命令：
 
 ```bash
 bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048.sh
+```
+
+LoRA-teacher 启动命令：
+
+```bash
+bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
 ```
 
 ### 任务 B：双层 CSA indexer 训练
@@ -91,10 +97,16 @@ bash experiments/z_image_indexer/run_train_csa_multilayer_l12_l13_m2_topk64.sh
 - `compressed_topk=64`
 - 训练模式：只训练 indexer，不训练主模型
 
-启动命令：
+基础 teacher 启动命令：
 
 ```bash
 bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
+```
+
+LoRA-teacher 启动命令：
+
+```bash
+bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh
 ```
 
 说明：
@@ -388,11 +400,11 @@ experiments/z_image_indexer/results/eval_csa_layer12_m2_topk64/
 先运行 LoRA：
 bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048_adapter.sh
 
-再运行单层 indexer：
-bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048.sh
+再运行单层 LoRA-teacher indexer：
+bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
 
 如果需要测试全部层训练，再运行：
-bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
+bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh
 
 训练结束后返回对应 results 目录下的 summary.json、metrics.json 和 checkpoint 路径。
 ```
@@ -403,10 +415,10 @@ bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
 
 1. 2048 LoRA 训练，优先使用 `run_train_z_image_turbo_lora_2048_adapter.sh`
 2. 验证 LoRA 生成质量
-3. 2048 单层 indexer 训练 smoke run：`steps=50`
-4. 2048 单层 indexer 训练完整 1000 步
-5. 2048 全层 indexer 训练 smoke run：`steps=50, batch_size=4`
-6. 2048 全层 indexer 训练完整 1000 步
+3. 2048 单层 LoRA-teacher indexer 训练 smoke run：`steps=50`
+4. 2048 单层 LoRA-teacher indexer 训练完整 1000 步
+5. 2048 全层 LoRA-teacher indexer 训练 smoke run：`steps=50, batch_size=4`
+6. 2048 全层 LoRA-teacher indexer 训练完整 1000 步
 7. 如需真正利用多卡训练 indexer，需要后续补 DDP / 模型并行启动逻辑
 
 当前代码主要验证的是 indexer-only 蒸馏路线；多卡服务器可以作为硬件目标，但脚本本身仍是单进程训练入口。
