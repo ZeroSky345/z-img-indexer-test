@@ -1,0 +1,24 @@
+{
+  "model": "Tongyi-MAI/Z-Image-Turbo",
+  "route": "CSA-like",
+  "training_mode": "indexer-only",
+  "layer_ids": "all",
+  "batch_size": 4,
+  "compression_rate": 2,
+  "compressed_topk": 64,
+  "rank": 128,
+  "steps": 1000,
+  "height": 2048,
+  "width": 2048,
+  "num_inference_steps": 4,
+  "lr": 0.001,
+  "weight_decay": 0.0,
+  "recall_k": 16,
+  "query_chunk_size": 512,
+  "metrics_max_queries": 2048,
+  "notes": [
+    "This is the high-resolution all-layer training configuration.",
+    "batch_size is implemented as gradient accumulation over prompt/timestep/latent samples.",
+    "The current script is single-process; CUDA_VISIBLE_DEVICES can expose multiple GPUs, but distributed data/model parallelism is not implemented here yet."
+  ]
+}
