@@ -1,0 +1,34 @@
+{
+  "stage": "lora_weight_training_2048",
+  "model": "Tongyi-MAI/Z-Image-Turbo",
+  "training_target": "LoRA adapter weights only",
+  "base_model_weights": "frozen",
+  "resolution": {
+    "height": 2048,
+    "width": 2048,
+    "max_pixels": 4194304
+  },
+  "recommended_script": "run_train_lora_weights_2048_adapter.sh",
+  "plain_script": "run_train_lora_weights_2048.sh",
+  "output_path": "./models/lora/z_image_turbo_lora_2048_adapter",
+  "selected_teacher_lora_path": "./models/lora/z_image_turbo_lora.safetensors",
+  "lora": {
+    "base_model": "dit",
+    "target_modules": "to_q,to_k,to_v,to_out.0,w1,w2,w3",
+    "rank": 32,
+    "learning_rate": 0.0001,
+    "num_epochs": 5,
+    "dataset_repeat": 50
+  },
+  "preset_adapter": {
+    "enabled_in_recommended_script": true,
+    "model": "ostris/zimage_turbo_training_adapter",
+    "path": "models/ostris/zimage_turbo_training_adapter/zimage_turbo_training_adapter_v1.safetensors",
+    "purpose": "help preserve Z-Image-Turbo few-step behavior during LoRA adapter-weight training"
+  },
+  "downstream_usage": [
+    "Select a generated LoRA checkpoint, for example epoch-4.safetensors.",
+    "Copy it to ./models/lora/z_image_turbo_lora.safetensors or export TEACHER_LORA_PATH.",
+    "Run LoRA-teacher indexer distillation scripts."
+  ]
+}
