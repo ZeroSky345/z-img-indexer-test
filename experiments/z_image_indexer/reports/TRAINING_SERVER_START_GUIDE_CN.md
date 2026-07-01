@@ -1,170 +1,65 @@
 # Z-Image Indexer 训练服务器启动说明
 
-本文档用于把公开仓库搬到新的训练机器后，直接启动当前的 Z-Image indexer 训练。
+本文档说明如何在训练服务器上直接启动当前项目的 `Z-Image-Turbo + LoRA 权重 + CSA/indexer` 训练与评测。
 
 公开仓库：
 
 - https://github.com/ZeroSky345/z-img-indexer-test
 
-当前训练对象不是重训完整 `Z-Image-Turbo`，而是训练一个独立的 sparse routing / indexer 模块。
+## 1. 当前训练内容
 
-当前后续训练服务器默认目标分辨率已调整为：
+本项目当前不训练 `Z-Image-Turbo` 主模型，也不训练主模型 LoRA。
 
-- `2048x2048`
+当前只训练：
 
-512x512 脚本仍保留为快速环境检查入口，但正式高分辨率训练请使用本文档中的 2048 命令。
+- CSA-like sparse routing indexer
+- 单层 indexer：`layer12`
+- 全层 indexer：`layer_ids=all`
 
-## 1. 当前可以启动的训练任务
+LoRA 的角色是：
 
-### 任务 0：Z-Image-Turbo LoRA 2048 训练
+- 作为外部已经训练好的权重输入
+- 在 indexer 蒸馏时加载到 frozen teacher DiT
+- 让 indexer 学习 `Z-Image-Turbo + LoRA` 后的 attention/QK 分布
 
-这是当前新增的主模型 LoRA 训练入口，和 indexer 训练是两条路线。
+也就是说，训练目标是：
 
-推荐先使用带 adapter 的 Turbo LoRA 训练：
-
-```bash
-bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048_adapter.sh
+```text
+frozen Z-Image-Turbo + external LoRA -> teacher
+trainable CSA/indexer -> student
 ```
 
-普通 LoRA 入口：
+## 2. 文件入口
 
-```bash
-bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048.sh
-```
+核心训练脚本：
 
-配置：
+- `experiments/z_image_indexer/train_csa_indexer.py`
+- `experiments/z_image_indexer/train_csa_multilayer_indexer.py`
 
-- 分辨率：`2048x2048`
-- `lora_base_model=dit`
-- `lora_target_modules=to_q,to_k,to_v,to_out.0,w1,w2,w3`
-- `lora_rank=32`
-- 默认 `NUM_PROCESSES=4`
+核心评测脚本：
 
-说明：
+- `experiments/z_image_indexer/eval_csa_indexer.py`
+- `experiments/z_image_indexer/eval_csa_multilayer_indexer.py`
 
-- LoRA 会改变主模型 DiT 的生成行为。
-- indexer 训练不会改主模型，只训练 sparse routing/indexer。
-- 如果最终目标是“LoRA 后的 sparse inference”，建议先训 LoRA，再固定 LoRA 后训练 indexer。
+推荐启动脚本：
 
-### 任务 A：单层 CSA indexer 训练
+- `experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh`
+- `experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh`
+- `experiments/z_image_indexer/run_eval_csa_m2_topk64_2048_lora_teacher.sh`
+- `experiments/z_image_indexer/run_eval_csa_all_layers_m2_topk64_2048_lora_teacher.sh`
 
-这是当前最稳的 indexer 入口。若已经训练 LoRA，优先使用 LoRA-teacher 版本。
+## 3. 服务器准备
 
-配置：
-
-- 模型：`Tongyi-MAI/Z-Image-Turbo`
-- 层：`layer12`
-- 路线：`CSA-like compressed memory`
-- `compression_rate=2`
-- `compressed_topk=64`
-- 分辨率：`2048x2048`
-- 推理步数：`4`
-- 训练模式：只训练 indexer，不训练主模型
-
-基础 teacher 启动命令：
-
-```bash
-bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048.sh
-```
-
-LoRA-teacher 启动命令：
-
-```bash
-bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
-```
-
-### 任务 B：双层 CSA indexer 训练
-
-这是此前已经验证过可以跑通的多层入口，用于训练 `layer12,13` 两层 indexer。
-
-启动命令：
-
-```bash
-bash experiments/z_image_indexer/run_train_csa_multilayer_l12_l13_m2_topk64.sh
-```
-
-### 任务 C：全部主干层 CSA indexer 训练
-
-这是最新补充的入口，支持训练 Z-Image DiT 的全部 main transformer layers。
-
-配置：
-
-- 层：`all`
-- 默认等价于 Z-Image DiT 所有主干层，当前模型通常是 `0-29`
-- `batch_size=4`
-- 分辨率：`2048x2048`
-- `compression_rate=2`
-- `compressed_topk=64`
-- 训练模式：只训练 indexer，不训练主模型
-
-基础 teacher 启动命令：
-
-```bash
-bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
-```
-
-LoRA-teacher 启动命令：
-
-```bash
-bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh
-```
-
-说明：
-
-- `--layer-ids all` 会自动读取 `pipe.dit.layers` 的层数。
-- `--batch-size 4` 是梯度累积意义上的 batch size，每个 optimizer step 累计 4 个 prompt/timestep/latent 样本。
-- 全层 2048 训练面向后续大显存 / 多卡服务器，不再按 512 基线估算资源。
-
-## 2. 推荐硬件
-
-### 单层训练
-
-建议：
-
-- NVIDIA GPU
-- 能正常运行 `Z-Image-Turbo` 2048x2048 4-step 推理
-- 推荐 40GB 以上显存，更稳妥是 80GB
-
-### 双层训练
-
-建议：
-
-- 单张 80GB GPU 优先
-- 如果环境已经能跑单层训练，双层训练通常可以继续尝试
-
-### 全层训练
-
-建议：
-
-- 面向大显存 / 多卡训练服务器
-- 默认 `2048x2048`
-- 默认 `batch_size=4`
-- 当前脚本是单进程训练入口；真正多卡并行需要后续补 DDP / 模型并行逻辑
-
-## 3. 服务器环境准备
-
-### 3.1 克隆仓库
+克隆仓库：
 
 ```bash
 git clone https://github.com/ZeroSky345/z-img-indexer-test.git
 cd z-img-indexer-test
 ```
 
-### 3.2 准备 Python 环境
+准备 Python 环境。若服务器已有可运行 DiffSynth/Z-Image 的环境，可直接使用。
 
-如果服务器已有能运行 `DiffSynth-Studio / Z-Image-Turbo` 的环境，可以直接使用已有环境。
-
-如果需要新建环境，可参考：
-
-```bash
-python -m venv /tmp/diffsynth-venv
-source /tmp/diffsynth-venv/bin/activate
-python -m pip install --upgrade pip
-```
-
-然后安装项目依赖。不同训练服务器 CUDA / PyTorch 版本可能不同，建议优先按服务器已有 CUDA 版本安装 PyTorch，再安装 DiffSynth 相关依赖。
-
-基本要求：
+基本依赖：
 
 - `torch`
 - `transformers`
@@ -172,9 +67,8 @@ python -m pip install --upgrade pip
 - `safetensors`
 - `einops`
 - `Pillow`
-- 仓库内 `diffsynth` 可以被 Python import
 
-可以先测试：
+快速检查：
 
 ```bash
 python - <<'PY'
@@ -186,52 +80,96 @@ print("diffsynth import ok")
 PY
 ```
 
-## 4. 模型权重路径
+## 4. 模型与 LoRA 权重路径
 
-默认脚本假设模型权重路径是：
+默认基础模型路径：
 
 ```bash
 /tmp/DiffSynth-Studio/models
 ```
 
-如果模型放在其他路径，需要修改启动脚本中的参数：
+如果模型在其他位置，修改启动脚本里的：
 
 ```bash
 --model-base-path /tmp/DiffSynth-Studio/models
 ```
 
-改成真实路径，例如：
+LoRA 权重需要提前准备好。默认路径：
 
 ```bash
---model-base-path /data/models
+./models/lora/z_image_turbo_lora.safetensors
 ```
 
-脚本还会使用：
+推荐放置方式：
 
 ```bash
+mkdir -p ./models/lora
+cp /path/to/your_lora.safetensors ./models/lora/z_image_turbo_lora.safetensors
+```
+
+也可以不复制，直接用环境变量覆盖：
+
+```bash
+export TEACHER_LORA_PATH=/path/to/your_lora.safetensors
+```
+
+LoRA alpha 默认：
+
+```bash
+export TEACHER_LORA_ALPHA=1.0
+```
+
+## 5. 环境变量
+
+建议：
+
+```bash
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 export MODELSCOPE_CACHE=/tmp/modelscope-cache
 export HF_HOME=/tmp/hf-home
+export TEACHER_LORA_PATH=./models/lora/z_image_turbo_lora.safetensors
+export TEACHER_LORA_ALPHA=1.0
 ```
 
-如服务器有统一缓存目录，可以改成对应路径。
+注意：当前 indexer 训练脚本仍是单进程入口；`CUDA_VISIBLE_DEVICES=0,1,2,3` 表示面向多卡服务器环境，但不等于已经实现 DDP/model parallel。
 
-## 5. 启动训练
+## 6. 单层 indexer 训练
 
-### 5.1 推荐先跑 2048 单层训练
+推荐先跑单层，确认 LoRA teacher、数据 prompt、模型路径全部正常。
 
 ```bash
-cd z-img-indexer-test
-export CUDA_VISIBLE_DEVICES=0
-export MODELSCOPE_CACHE=/tmp/modelscope-cache
-export HF_HOME=/tmp/hf-home
-
-bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048.sh
+bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
 ```
 
-训练输出目录：
+等价核心参数：
+
+```bash
+python experiments/z_image_indexer/train_csa_indexer.py \
+  --model-base-path /tmp/DiffSynth-Studio/models \
+  --teacher-lora-path ./models/lora/z_image_turbo_lora.safetensors \
+  --teacher-lora-alpha 1.0 \
+  --prompt-file experiments/z_image_indexer/configs/default_prompts_train.txt \
+  --output-dir experiments/z_image_indexer/results/train_csa_layer12_m2_topk64_2048_lora_teacher \
+  --steps 1000 \
+  --height 2048 \
+  --width 2048 \
+  --num-inference-steps 4 \
+  --layer-id 12 \
+  --compression-rate 2 \
+  --compressed-topk 64 \
+  --rank 128 \
+  --lr 1e-3 \
+  --weight-decay 0.0 \
+  --recall-k 16 \
+  --query-chunk-size 512 \
+  --metrics-max-queries 2048 \
+  --device cuda
+```
+
+输出目录：
 
 ```text
-experiments/z_image_indexer/results/train_csa_layer12_m2_topk64_2048/
+experiments/z_image_indexer/results/train_csa_layer12_m2_topk64_2048_lora_teacher/
 ```
 
 关键输出：
@@ -241,56 +179,26 @@ experiments/z_image_indexer/results/train_csa_layer12_m2_topk64_2048/
 - `summary.json`
 - `run_config.json`
 
-### 5.2 启动双层训练
+## 7. 全层 indexer 训练
+
+单层确认无误后，启动全层训练：
 
 ```bash
-bash experiments/z_image_indexer/run_train_csa_multilayer_l12_l13_m2_topk64.sh
+bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh
 ```
 
-训练输出目录：
-
-```text
-experiments/z_image_indexer/results/train_csa_layers12_13_m2_topk64/
-```
-
-关键输出：
-
-- `csa_multilayer_indexer_distill.pt`
-- `metrics.json`
-- `summary.json`
-- `run_config.json`
-
-### 5.3 启动 2048 全层训练
-
-```bash
-bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_bs4.sh
-```
-
-训练输出目录：
-
-```text
-experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_2048_bs4/
-```
-
-关键输出：
-
-- `csa_multilayer_indexer_distill.pt`
-- `metrics.json`
-- `summary.json`
-- `run_config.json`
-
-## 6. 全层训练的直接 Python 命令
-
-如果不想使用 shell 脚本，可以直接执行：
+等价核心参数：
 
 ```bash
 python experiments/z_image_indexer/train_csa_multilayer_indexer.py \
   --model-base-path /tmp/DiffSynth-Studio/models \
+  --teacher-lora-path ./models/lora/z_image_turbo_lora.safetensors \
+  --teacher-lora-alpha 1.0 \
   --prompt-file experiments/z_image_indexer/configs/default_prompts_train.txt \
-  --output-dir experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_2048_bs4 \
+  --output-dir experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4 \
   --steps 1000 \
-  --height 512 \
-  --width 512 \
+  --height 2048 \
+  --width 2048 \
   --num-inference-steps 4 \
   --layer-ids all \
   --batch-size 4 \
@@ -300,43 +208,94 @@ python experiments/z_image_indexer/train_csa_multilayer_indexer.py \
   --lr 1e-3 \
   --weight-decay 0.0 \
   --recall-k 16 \
+  --query-chunk-size 512 \
+  --metrics-max-queries 2048 \
   --log-every 10 \
-  --seed 42 \
   --device cuda
 ```
 
-常用调整：
+输出目录：
 
-```bash
---steps 50
+```text
+experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4/
 ```
 
-用于 smoke run。
+关键输出：
+
+- `csa_multilayer_indexer_distill.pt`
+- `metrics.json`
+- `summary.json`
+- `run_config.json`
+
+## 8. 单层评测
+
+训练完单层 indexer 后执行：
 
 ```bash
---batch-size 2
+bash experiments/z_image_indexer/run_eval_csa_m2_topk64_2048_lora_teacher.sh
 ```
 
-用于显存不足时降 batch。
+默认 checkpoint：
 
-```bash
---layer-ids 0-14
+```text
+experiments/z_image_indexer/results/train_csa_layer12_m2_topk64_2048_lora_teacher/csa_indexer_distill.pt
 ```
 
-用于只训练前半部分层。
+如需指定：
 
 ```bash
---layer-ids 15-29
+INDEXER_CKPT=/path/to/csa_indexer_distill.pt \
+bash experiments/z_image_indexer/run_eval_csa_m2_topk64_2048_lora_teacher.sh
 ```
 
-用于只训练后半部分层。
+输出目录：
 
-## 7. 训练后如何判断是否正常
+```text
+experiments/z_image_indexer/results/eval_csa_layer12_m2_topk64_2048_lora_teacher/
+```
 
-训练结束后先看：
+## 9. 全层评测
+
+训练完全层 indexer 后执行：
 
 ```bash
-cat experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_bs4/summary.json
+bash experiments/z_image_indexer/run_eval_csa_all_layers_m2_topk64_2048_lora_teacher.sh
+```
+
+默认 checkpoint：
+
+```text
+experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4/csa_multilayer_indexer_distill.pt
+```
+
+如需指定：
+
+```bash
+INDEXER_CKPT=/path/to/csa_multilayer_indexer_distill.pt \
+bash experiments/z_image_indexer/run_eval_csa_all_layers_m2_topk64_2048_lora_teacher.sh
+```
+
+输出目录：
+
+```text
+experiments/z_image_indexer/results/eval_csa_all_layers_m2_topk64_2048_lora_teacher/
+```
+
+评测输出：
+
+- `records.json`
+- `summary.json`
+- `run_config.json`
+- `prompt_*_dense.png`
+- `prompt_*_csa_multilayer.png`
+- `prompt_*_compare_csa_multilayer.png`
+
+## 10. 指标查看
+
+训练后先看：
+
+```bash
+cat experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4/summary.json
 ```
 
 重点字段：
@@ -345,80 +304,46 @@ cat experiments/z_image_indexer/results/train_csa_all_layers_m2_topk64_bs4/summa
 - `final_loss`
 - `initial_layer_recalls`
 - `final_layer_recalls`
-- `batch_size`
-- `layer_ids`
+- `teacher_lora_loaded`
+- `teacher_lora_path`
 
-正常情况：
-
-- `summary.json` 能生成
-- `metrics.json` 有每一步记录
-- 大多数目标层的 `final_layer_recalls` 高于初始值
-
-需要谨慎的情况：
-
-- `final_loss` 高于 `initial_loss`
-- 只有少数层 recall 提升
-- 训练速度极慢
-
-这些不一定表示脚本失败，但说明该配置还需要继续调参。
-
-## 8. 训练后评测
-
-当前已具备单层训练后的评测脚本：
+评测后看：
 
 ```bash
-bash experiments/z_image_indexer/run_eval_csa_m2_topk64.sh
+cat experiments/z_image_indexer/results/eval_csa_all_layers_m2_topk64_2048_lora_teacher/summary.json
 ```
 
-输出目录：
+重点字段：
+
+- `mean_dense_time_sec`
+- `mean_sparse_time_sec`
+- `mean_time_ratio_sparse_over_dense`
+- `mean_image_mse`
+- `teacher_lora_loaded`
+
+## 11. 推荐执行顺序
+
+1. 准备外部 LoRA 权重。
+2. 把 LoRA 权重放到 `./models/lora/z_image_turbo_lora.safetensors`，或设置 `TEACHER_LORA_PATH`。
+3. 跑单层 LoRA-teacher indexer 训练。
+4. 跑单层 LoRA-teacher indexer 评测。
+5. 跑全层 LoRA-teacher indexer 训练。
+6. 跑全层 LoRA-teacher indexer 评测。
+7. 汇总 `summary.json`、`metrics.json` 和对比图。
+
+## 12. 给执行者的最短说明
 
 ```text
-experiments/z_image_indexer/results/eval_csa_layer12_m2_topk64/
-```
+请 clone https://github.com/ZeroSky345/z-img-indexer-test，
+进入仓库后准备好 Python / CUDA / DiffSynth 环境。
+把已经训练好的 Z-Image-Turbo LoRA 权重放到：
+./models/lora/z_image_turbo_lora.safetensors
 
-关键输出：
-
-- `records.json`
-- `summary.json`
-- dense / sparse 生成图
-- `prompt_*_compare_csa.png` 对比图
-
-注意：
-
-- 全层训练后的完整替换评测还需要继续补齐对应 eval 入口。
-- 因此全层训练完成后，第一步先看训练指标；正式判断质量/速度收益需要后续全层推理替换评测。
-
-## 9. 给其他人或 AI 的最短执行说明
-
-可以直接把下面这段给训练服务器上的执行者：
-
-```text
-请在训练服务器上 clone 仓库 https://github.com/ZeroSky345/z-img-indexer-test，
-进入仓库根目录后，确认 Python 环境可以 import torch 和 diffsynth，
-确认 Z-Image-Turbo 模型权重路径为 /tmp/DiffSynth-Studio/models。
-
-先运行 LoRA：
-bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048_adapter.sh
-
-再运行单层 LoRA-teacher indexer：
+然后依次执行：
 bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
-
-如果需要测试全部层训练，再运行：
+bash experiments/z_image_indexer/run_eval_csa_m2_topk64_2048_lora_teacher.sh
 bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_teacher_bs4.sh
+bash experiments/z_image_indexer/run_eval_csa_all_layers_m2_topk64_2048_lora_teacher.sh
 
-训练结束后返回对应 results 目录下的 summary.json、metrics.json 和 checkpoint 路径。
+最后返回 train/eval 目录下的 summary.json、metrics.json、run_config.json 和对比图。
 ```
-
-## 10. 当前建议
-
-正式迁移到新机器时，建议执行顺序是：
-
-1. 2048 LoRA 训练，优先使用 `run_train_z_image_turbo_lora_2048_adapter.sh`
-2. 验证 LoRA 生成质量
-3. 2048 单层 LoRA-teacher indexer 训练 smoke run：`steps=50`
-4. 2048 单层 LoRA-teacher indexer 训练完整 1000 步
-5. 2048 全层 LoRA-teacher indexer 训练 smoke run：`steps=50, batch_size=4`
-6. 2048 全层 LoRA-teacher indexer 训练完整 1000 步
-7. 如需真正利用多卡训练 indexer，需要后续补 DDP / 模型并行启动逻辑
-
-当前代码主要验证的是 indexer-only 蒸馏路线；多卡服务器可以作为硬件目标，但脚本本身仍是单进程训练入口。
