@@ -48,22 +48,9 @@ Important options:
 
 See `reports/STAGE14_2048_TRAINING_SUPPORT.md`.
 
-## Z-Image-Turbo LoRA 2048
-
-LoRA entrypoints:
-
-```bash
-bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048_adapter.sh
-bash experiments/z_image_indexer/run_train_z_image_turbo_lora_2048.sh
-```
-
-The adapter-assisted path is recommended first for Turbo.
-
-See `reports/STAGE15_Z_IMAGE_TURBO_LORA_2048.md`.
-
 ## LoRA-Teacher Indexer Training
 
-Use a trained LoRA checkpoint as the teacher when distilling the indexer:
+Use an external trained LoRA checkpoint as the teacher when distilling the indexer:
 
 ```bash
 bash experiments/z_image_indexer/run_train_csa_m2_topk64_2048_lora_teacher.sh
@@ -73,7 +60,7 @@ bash experiments/z_image_indexer/run_train_csa_all_layers_m2_topk64_2048_lora_te
 By default these scripts use:
 
 ```bash
-./models/train/Z-Image-Turbo_lora_2048_adapter/epoch-4.safetensors
+./models/lora/z_image_turbo_lora.safetensors
 ```
 
 Override with `TEACHER_LORA_PATH=/path/to/lora.safetensors`.
