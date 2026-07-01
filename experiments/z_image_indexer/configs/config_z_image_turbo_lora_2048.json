@@ -1,0 +1,22 @@
+{
+  "model": "Tongyi-MAI/Z-Image-Turbo",
+  "training_type": "DiT LoRA",
+  "resolution": "2048x2048",
+  "height": 2048,
+  "width": 2048,
+  "max_pixels": 4194304,
+  "dataset": "DiffSynth-Studio/diffsynth_example_dataset:z_image/Z-Image-Turbo",
+  "learning_rate": 0.0001,
+  "num_epochs": 5,
+  "dataset_repeat": 50,
+  "lora_base_model": "dit",
+  "lora_target_modules": "to_q,to_k,to_v,to_out.0,w1,w2,w3",
+  "lora_rank": 32,
+  "num_processes": 4,
+  "recommended_script": "run_train_z_image_turbo_lora_2048_adapter.sh",
+  "notes": [
+    "This trains LoRA weights for the Z-Image-Turbo DiT.",
+    "It is separate from CSA/indexer distillation.",
+    "The adapter-assisted script is recommended for Turbo because ordinary LoRA training can weaken few-step distilled behavior."
+  ]
+}
