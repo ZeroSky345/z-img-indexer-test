@@ -1,0 +1,22 @@
+{
+  "model": "Tongyi-MAI/Z-Image-Turbo",
+  "route": "CSA-like",
+  "training_mode": "indexer-only",
+  "layer_ids": "all",
+  "batch_size": 4,
+  "compression_rate": 2,
+  "compressed_topk": 64,
+  "rank": 128,
+  "steps": 1000,
+  "height": 512,
+  "width": 512,
+  "num_inference_steps": 4,
+  "lr": 0.001,
+  "weight_decay": 0.0,
+  "recall_k": 16,
+  "notes": [
+    "The training script resolves layer_ids=all to every Z-Image DiT main transformer layer.",
+    "batch_size uses gradient accumulation over prompt/timestep/latent samples per optimizer step.",
+    "All target layers share one teacher forward pass per micro-sample instead of replaying the prefix once per layer."
+  ]
+}
