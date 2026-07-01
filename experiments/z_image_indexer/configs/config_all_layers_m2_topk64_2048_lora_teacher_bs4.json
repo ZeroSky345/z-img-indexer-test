@@ -23,6 +23,6 @@
   "notes": [
     "Train the LoRA first, then use the resulting LoRA checkpoint as the teacher for indexer distillation.",
     "The indexer learns attention routing from the LoRA-adapted teacher distribution.",
-    "The current default assumes an externally prepared LoRA weight copied into ./models/lora/z_image_turbo_lora.safetensors."
+    "The default assumes a selected LoRA checkpoint copied into ./models/lora/z_image_turbo_lora.safetensors or provided via TEACHER_LORA_PATH."
   ]
 }
